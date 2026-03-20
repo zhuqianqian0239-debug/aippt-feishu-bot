@@ -1,3 +1,5 @@
+from http.server import BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
 import json
 import urllib.request
 import ssl
@@ -47,63 +49,41 @@ def get_auth_code(uid):
         print("Error:", e)
     return None
 
-def handler(request):
-    query = request.get("query", {})
-    uid_param = query.get("uid", "anonymous")
-    if isinstance(uid_param, list):
-        uid = uid_param[0]
-    else:
-        uid = uid_param
-    
-    code = get_auth_code(uid)
-    
-    if not code:
-        return {
-            "statusCode": 500,
-            "headers": {"Content-Type": "text/plain"},
-            "body": "Error: Failed to get authorization code"
-        }
-    
-    html = ("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>AiPPT</title>"
-            "<script src='https://api-static.aippt.cn/aippt-iframe-sdk.js'></script>"
-            "<style>*{margin:0;padding:0;box-sizing:border-box}"
-            "body{font-family:sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);"
-            "height:100vh;display:flex;flex-direction:column}"
-            ".header{background:rgba(255,255,255,0.1);color:white;padding:15px 20px;"
-            "display:flex;justify-content:space-between;align-items:center}"
-            "#container{flex:1;width:100%;position:relative;background:white}"
-            ".loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}"
-            ".spinner{width:50px;height:50px;border:3px solid #f3f3f3;border-top:3px solid #667eea;"
-            "border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}"
-            "@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}"
-            "</style></head><body>"
-            "<div class='header'><h1>AiPPT 智能PPT工具</h1>"
-            "<span>用户: " + uid + "</span></div>"
-            "<div id='container'><div class='loading' id='loading'>"
-            "<div class='spinner'></div><p>正在加载 AiPPT...</p></div></div>"
-            "<script>"
-            "(async()=>{"
-            "try{"
-            "await AipptIframe.show({"
-            "appkey:'" + APP_KEY + "',"
-            "channel:'" + CHANNEL + "',"
-            "code:'" + code + "',"
-            "container:document.getElementById('container'),"
-            "editorModel:true"
-            "});"
-            "document.getElementById('loading').style.display='none';"
-            "}catch(e){"
-            "console.error(e);"
-            "document.getElementById('loading').innerHTML=\"<p style='color:red'>加载失败</p>\";"
-            "}"
-            "})();"
-            "</script></body></html>")
-    
-    return {
-        "statusCode": 200,
-        "headers": {
-            "Content-Type": "text/html; charset=utf-8",
-            "Access-Control-Allow-Origin": "*"
-        },
-        "body": html
-    }
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        query = parse_qs(parsed.query)
+        uid = query.get("uid", ["anonymous"])[0]
+        code = get_auth_code(uid)
+        
+        if not code:
+            self.send_response(500)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"Error: Failed to get authorization code")
+            return
+        
+        html = f'''<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>AiPPT</title>
+<script src="https://api-static.aippt.cn/aippt-iframe-sdk.js"></script>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);height:100vh;display:flex;flex-direction:column}}
+.header{{background:rgba(255,255,255,0.1);color:white;padding:15px 20px;display:flex;justify-content:space-between;align-items:center}}
+#container{{flex:1;width:100%;position:relative;background:white}}
+.loading{{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}}
+.spinner{{width:50px;height:50px;border:3px solid #f3f3f3;border-top:3px solid #667eea;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}}
+@keyframes spin{{0%{{transform:rotate(0deg)}}100%{{transform:rotate(360deg)}}}}
+</style></head><body>
+<div class="header"><h1>🎯 AiPPT 智能PPT工具</h1><span>{uid}</span></div>
+<div id="container"><div class="loading" id="loading"><div class="spinner"></div><p>正在加载...</p></div></div>
+<script>
+(async()=>{{try{{await AipptIframe.show({{appkey:'{APP_KEY}',channel:'{CHANNEL}',code:'{code}',container:document.getElementById("container"),editorModel:true}});document.getElementById("loading").style.display="none";}}catch(e){{console.error(e);}}}})();
+</script>
+</body></html>'''
+        
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(html.encode("utf-8"))
