@@ -1,3 +1,68 @@
+from http.server import BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
+import json
+import urllib.request
+import ssl
+import hmac
+import hashlib
+import base64
+import time
+
+APP_KEY = "658415eecba7a"
+SECRET_KEY = "9rSv6RYyt1rD8BPhaN2DVIGiGCdzReaw"
+API_BASE = "https://co.aippt.cn"
+CHANNEL = "feishu_bot"
+
+def generate_signature(method, uri, timestamp):
+    if not uri.startswith("/"):
+        uri = "/" + uri
+    if not uri.endswith("/"):
+        uri = uri + "/"
+    string_to_sign = method + "@" + uri + "@" + timestamp
+    signature = hmac.new(
+        SECRET_KEY.encode("utf-8"),
+        string_to_sign.encode("utf-8"),
+        hashlib.sha1
+    ).digest()
+    return base64.b64encode(signature).decode("utf-8")
+
+def get_auth_code(uid):
+    try:
+        uri = "/api/grant/code"
+        timestamp = str(int(time.time()))
+        signature = generate_signature("GET", uri, timestamp)
+        url = API_BASE + uri + "?uid=" + uid + "&channel=" + CHANNEL
+        headers = {
+            "x-api-key": APP_KEY,
+            "x-timestamp": timestamp,
+            "x-signature": signature
+        }
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(req, context=ctx, timeout=10) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            if result.get("code") == 0:
+                return result.get("data", {}).get("code")
+    except Exception as e:
+        print("Error:", e)
+    return None
+
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        query = parse_qs(parsed.query)
+        uid = query.get("uid", ["anonymous"])[0]
+        code = get_auth_code(uid)
+        
+        if not code:
+            self.send_response(500)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"Error")
+            return
+        
         html = f'''<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>AiPPT</title>
 <script src="https://api-static.aippt.cn/aippt-iframe-sdk.js"></script>
@@ -13,3 +78,9 @@ body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
 <div id="container"><div class="loading" id="loading"><div class="spinner"></div><p>正在加载 AiPPT...</p></div></div>
 <script>(async()=>{{try{{await AipptIframe.show({{appkey:'{APP_KEY}',channel:'{CHANNEL}',code:'{code}',container:document.getElementById("container"),editorModel:true}});document.getElementById("loading").style.display="none"}}catch(e){{console.error(e)}}}})()</script>
 </body></html>'''
+        
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(html.encode("utf-8"))
