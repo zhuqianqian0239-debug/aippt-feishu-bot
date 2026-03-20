@@ -60,7 +60,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_response(500)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
-            self.wfile.write(b"Error: Failed to get authorization code")
+            self.wfile.write(b"Error")
             return
         
         html = f'''<!DOCTYPE html>
@@ -77,9 +77,7 @@ body{{font-family:sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba
 </style></head><body>
 <div class="header"><h1>🎯 AiPPT 智能PPT工具</h1><span>{uid}</span></div>
 <div id="container"><div class="loading" id="loading"><div class="spinner"></div><p>正在加载...</p></div></div>
-<script>
-(async()=>{{try{{await AipptIframe.show({{appkey:'{APP_KEY}',channel:'{CHANNEL}',code:'{code}',container:document.getElementById("container"),editorModel:true}});document.getElementById("loading").style.display="none";}}catch(e){{console.error(e);}}}})();
-</script>
+<script>(async()=>{{try{{await AipptIframe.show({{appkey:'{APP_KEY}',channel:'{CHANNEL}',code:'{code}',container:document.getElementById("container"),editorModel:true}});document.getElementById("loading").style.display="none";}}catch(e){{console.error(e);}}}})();</script>
 </body></html>'''
         
         self.send_response(200)
