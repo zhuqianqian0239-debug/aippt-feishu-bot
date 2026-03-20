@@ -1,0 +1,6 @@
+[project]
+name = "aippt-feishu-bot"
+version = "1.0.0"
+description = "AiPPT SDK embed for Feishu"
+requires-python = ">=3.9"
+dependencies = []
